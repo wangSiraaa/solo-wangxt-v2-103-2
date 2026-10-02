@@ -23,7 +23,7 @@ import networkx as nx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .models import Node, Segment, Valve
+from .models import Node, Segment, Valve, SEED_VERSION_ID
 
 MAX_ENUMERATE = 200_000
 MAX_ALTERNATIVES = 5
@@ -158,8 +158,17 @@ def _valve_view(edges: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(out, key=lambda x: x["id"])
 
 
-def compute_isolation(db: Session, target_id: str) -> dict[str, Any]:
-    nodes, edges = _load(db)
+def compute_isolation_payload(
+    nodes: list[Any],
+    edges: dict[str, dict[str, Any]],
+    target_id: str,
+    topology_version: str = SEED_VERSION_ID,
+) -> dict[str, Any]:
+    """在给定版本的 (nodes, edges) 上计算隔离方案。
+
+    纯函数（不访问数据库）：同一版本快照 + 同一锁定态必然得到同一结果，
+    这是“新版本不得重解释旧结果”的基础。结果中带有 topology_version。
+    """
     node_ids = {n.id for n in nodes}
     if target_id not in node_ids:
         raise TopologyError(f"目标节点不存在: {target_id}")
@@ -168,6 +177,11 @@ def compute_isolation(db: Session, target_id: str) -> dict[str, Any]:
     essentials = sorted(n.id for n in nodes if n.essential)
     if not sources:
         raise TopologyError("拓扑中没有介质来源节点")
+
+    version_meta = {
+        "topology_version": topology_version,
+        "version_id": topology_version,
+    }
 
     full_open = nx.Graph()
     full_open.add_nodes_from(node_ids)
@@ -189,6 +203,7 @@ def compute_isolation(db: Session, target_id: str) -> dict[str, Any]:
         return {
             "feasible": True,
             "target_id": target_id,
+            **version_meta,
             "sources": sources,
             "essentials": essentials,
             "candidate_valves": _valve_view(edges),
@@ -248,6 +263,7 @@ def compute_isolation(db: Session, target_id: str) -> dict[str, Any]:
     result: dict[str, Any] = {
         "feasible": bool(solutions),
         "target_id": target_id,
+        **version_meta,
         "sources": sources,
         "essentials": essentials,
         "candidate_valves": _valve_view(edges),
@@ -398,9 +414,12 @@ def compute_isolation(db: Session, target_id: str) -> dict[str, Any]:
     return result
 
 
-def topology_payload(db: Session) -> dict[str, Any]:
-    nodes, edges = _load(db)
+def topology_payload_from(
+    nodes: list[Any], edges: dict[str, dict[str, Any]], topology_version: str = SEED_VERSION_ID
+) -> dict[str, Any]:
     return {
+        "topology_version": topology_version,
+        "version_id": topology_version,
         "nodes": [
             {"id": n.id, "name": n.name, "kind": n.kind, "x": n.x, "y": n.y, "essential": n.essential}
             for n in nodes
@@ -419,3 +438,15 @@ def topology_payload(db: Session) -> dict[str, Any]:
         ],
         "valves": _valve_view(edges),
     }
+
+
+def compute_isolation(db: Session, target_id: str) -> dict[str, Any]:
+    """v1 兼容入口：从原表加载样例拓扑后计算（结果标记为 v1）。"""
+    nodes, edges = _load(db)
+    return compute_isolation_payload(nodes, edges, target_id, SEED_VERSION_ID)
+
+
+def topology_payload(db: Session) -> dict[str, Any]:
+    """v1 兼容入口：从原表导出样例拓扑（标记为不可变 v1）。"""
+    nodes, edges = _load(db)
+    return topology_payload_from(nodes, edges, SEED_VERSION_ID)

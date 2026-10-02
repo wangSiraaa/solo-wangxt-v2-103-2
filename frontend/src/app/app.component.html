@@ -2,8 +2,8 @@
   <header>
     <h1>管网隔离方案培训演示</h1>
     <p class="sub">
-      Angular + Cytoscape.js 拓扑 ｜ FastAPI + NetworkX 候选隔离集合 ｜
-      PostgreSQL 连接与阀门状态
+      Angular + Cytoscape.js 版本化拓扑 ｜ FastAPI + NetworkX 候选隔离集合 ｜
+      草案发布、修订冲突与版本绑定的计算历史
     </p>
     <div class="disclaimer">
       仅针对给定拓扑与阀门模型做工艺培训演示，<b>不连接真实控制系统</b>，
@@ -15,27 +15,151 @@
     <div class="error">{{ error() }}</div>
   }
 
+  <!-- 版本栏 -->
+  <div class="version-bar panel">
+    <div class="vb-left">
+      <span class="vb-label">拓扑版本：</span>
+      <select
+        class="version-select"
+        [ngModel]="currentVersionId()"
+        (ngModelChange)="switchVersion($event)"
+      >
+        @for (v of versions(); track v.id) {
+          <option [value]="v.id">
+            {{ v.id }} · {{ v.name }}{{ v.immutable ? '（不可变）' : '' }}{{
+              v.base_version_id ? ' ← ' + v.base_version_id : ''
+            }}
+          </option>
+        }
+      </select>
+      <app-version-badge
+        [version]="currentVersionId()"
+        [name]="currentVersion()?.name"
+        [immutable]="currentVersion()?.immutable ?? false"
+      />
+      <span class="hint">
+        {{ currentVersion()?.node_count }} 节点 / {{ currentVersion()?.segment_count }} 管段 /
+        {{ currentVersion()?.valve_count }} 阀门
+      </span>
+    </div>
+    <div class="vb-right">
+      <button (click)="createDraft()">⧉ 从当前版本复制草案</button>
+      <button class="ghost" (click)="exportVersion(currentVersionId())">导出当前版本</button>
+      <label class="import-btn">
+        导入版本/旧计算
+        <input type="file" accept="application/json" (change)="onImportFile($event)" hidden />
+      </label>
+    </div>
+  </div>
+
+  <!-- 草案编辑器（覆盖层） -->
+  @if (editingDraft(); as d) {
+    <div class="editor-overlay">
+      <app-draft-editor
+        [draft]="d"
+        (published)="onDraftPublished($event)"
+        (closed)="editingDraft.set(null)"
+      />
+    </div>
+  }
+
+  <!-- 草案清单 + 历史 -->
+  <div class="subbars">
+    <div class="panel mini">
+      <h2>草案（{{ drafts().length }}）</h2>
+      @if (!drafts().length) {
+        <p class="hint">暂无草案。复制当前版本后可编辑并发布为新版本。</p>
+      }
+      <ul class="draft-list">
+        @for (dr of drafts(); track dr.id) {
+          <li>
+            <button class="link" (click)="editDraft(dr.id)">
+              {{ dr.name }} <code>{{ dr.id }}</code>
+              <em>← {{ dr.base_version_id }}</em>
+            </button>
+            <span class="valdot" [class.bad]="dr.validation_errors.length">
+              {{ dr.validation_errors.length ? dr.validation_errors.length + ' 项错误' : '可发布' }}
+            </span>
+            <button class="danger small" (click)="deleteDraft(dr.id)">删</button>
+          </li>
+        }
+      </ul>
+    </div>
+
+    <div class="panel mini">
+      <h2>计算历史（均绑定拓扑版本）</h2>
+      @if (!history().length) {
+        <p class="hint">尚无计算记录。</p>
+      }
+      <ul class="history-list">
+        @for (h of history(); track h.id) {
+          <li [class.active]="displayResult()?.calculation_id === h.id && viewMode() === 'history'">
+            <button class="link" (click)="openHistoryItem(h)">
+              <app-version-badge
+                [version]="h.topology_version"
+                [name]="h.version_name"
+                [immutable]="h.topology_version === 'v1'"
+                [small]="true"
+              />
+              <span>目标 {{ h.target_id }}</span>
+              <span [class.ok-txt]="h.feasible" [class.bad-txt]="!h.feasible">
+                {{ h.feasible ? '可行 ' + h.best_solution.join('/') : '无解' }}
+              </span>
+              <span class="hint">{{ h.created_at ? h.created_at.slice(0, 19).replace('T', ' ') : '' }}</span>
+            </button>
+          </li>
+        }
+      </ul>
+    </div>
+  </div>
+
+  @if (viewMode() === 'history') {
+    <div class="history-banner">
+      🕘 正在查看历史计算
+      <app-version-badge
+        [version]="displayResult()?.topology_version ?? 'v1'"
+        [name]="displayResult()?.version_name"
+        [immutable]="displayResult()?.topology_version === 'v1'"
+      />
+      —— 图形与解释均按该旧版本拓扑绘制，不受当前版本约束影响。
+      <button (click)="backToLive()">返回当前版本（{{ currentVersionId() }}）</button>
+    </div>
+  }
+
   <div class="layout">
     <!-- 左：控制与阀门锁定 -->
     <aside class="panel">
       <h2>目标设备与样例</h2>
       <p class="hint">
-        待隔离目标：<b>{{ targetId() }}（目标设备T）</b>
+        当前版本：
+        <app-version-badge
+          [version]="currentVersionId()"
+          [name]="currentVersion()?.name"
+          [immutable]="currentVersion()?.immutable ?? false"
+          [small]="true"
+        />
+      </p>
+      <p class="hint">
+        待隔离目标：<input class="target-input" [(ngModel)]="targetId" />
       </p>
       <div class="btns">
         <button class="primary" [disabled]="loading()" (click)="compute()">
-          {{ loading() ? '计算中…' : '重新计算隔离方案' }}
+          {{ loading() ? '计算中…' : '在当前版本计算' }}
         </button>
-        <button (click)="loadSample(1)">样例1 旁路绕回</button>
-        <button (click)="loadSample(2)">样例2 锁定入口阀</button>
-        <button (click)="loadSample(3)">样例3 锁定出口阀</button>
-        <button class="ghost" (click)="resetAll()">全部重置</button>
+        @if (currentVersionId() === 'v1') {
+          <button (click)="loadSample(1)">样例1 旁路绕回</button>
+          <button (click)="loadSample(2)">样例2 锁定入口阀</button>
+          <button (click)="loadSample(3)">样例3 锁定出口阀</button>
+        }
+        <button class="ghost" (click)="resetAll()">重置本版本锁阀</button>
       </div>
 
-      <h2>阀门锁定（禁止操作）</h2>
-      <p class="hint">勾选后该阀门保持当前状态、不参与候选关闭集合。</p>
+      <h2>阀门锁定（禁止操作）· {{ currentVersionId() }}</h2>
+      <p class="hint">
+        锁定只作用于<b>当前版本</b>；每个拓扑版本有独立的锁阀记录，互不影响。
+      </p>
       <ul class="valves">
-        @for (v of topology()?.valves; track v.id) {
+        @for (v of topology()?.valves; track currentVersionId() + ':' + v.id) {
           <li [class.bypass]="v.is_bypass">
             <label>
               <input
@@ -56,8 +180,17 @@
 
     <!-- 中：拓扑图 -->
     <main class="panel graph-panel">
-      <h2>管网拓扑（箭头=介质名义方向，紫虚线=旁路，★=必要供给点）</h2>
-      <app-network-graph [topology]="topology()" [result]="result()" />
+      <h2>
+        管网拓扑
+        <app-version-badge
+          [version]="displayTopology()?.topology_version ?? currentVersionId()"
+          [name]="displayTopology()?.version_name"
+          [immutable]="displayTopology()?.immutable ?? false"
+          [small]="true"
+        />
+      </h2>
+      <p class="hint">箭头=介质名义方向，紫虚线=旁路，★=必要供给点。</p>
+      <app-network-graph [topology]="displayTopology()" [result]="displayResult()" />
       <div class="legend">
         <span><i class="sw close"></i> 候选关闭阀</span>
         <span><i class="sw supply"></i> 方案后供给路径</span>
@@ -68,15 +201,35 @@
 
     <!-- 右：结果 -->
     <aside class="panel result-panel">
-      <h2>计算结果</h2>
+      <h2>
+        计算结果
+        @if (displayResult(); as rr) {
+          <app-version-badge
+            [version]="rr.topology_version"
+            [name]="rr.version_name"
+            [immutable]="rr.topology_version === 'v1'"
+            [small]="true"
+          />
+        }
+      </h2>
 
-      @if (!result()) {
-        <p class="hint">点击“重新计算”或选择样例开始。</p>
+      @if (!displayResult()) {
+        <p class="hint">点击“在当前版本计算”或从历史中打开旧记录。</p>
       }
 
-      @if (result(); as r) {
+      @if (displayResult(); as r) {
+        @if (viewMode() === 'history') {
+          <div class="history-tag">
+            历史记录 <code>{{ r.calculation_id }}</code
+            >：以下方案按 <b>{{ r.topology_version }}</b> 拓扑与当时锁阀
+            <code>{{ r.locks_snapshot | json }}</code> 解释，不会被新版本重解释。
+          </div>
+        }
         @if (r.feasible) {
-          <div class="ok">✓ 找到可行隔离集合（枚举 {{ r.examined_combinations }} 组）</div>
+          <div class="ok">
+            ✓ [{{ r.topology_version }}] 找到可行隔离集合（枚举
+            {{ r.examined_combinations }} 组）
+          </div>
           <h3>推荐方案：关闭以下 {{ r.best_solution.length }} 只阀门</h3>
           <ul class="close-list">
             @for (vid of r.best_solution; track vid) {
@@ -101,23 +254,21 @@
                 <li>
                   方案{{ s.alternative_rank + 1 }}：{{ s.close_valves.join('、') }}
                   @if (s.closes_bypass_valves.length) {
-                    <em>（切断旁路 {{ s.closes_bypass_valves.join('、') }}，经环网供 P2）</em>
+                    <em>（切断旁路 {{ s.closes_bypass_valves.join('、') }}）</em>
                   }
                 </li>
               }
             </ul>
           }
         } @else {
-          <div class="bad">✗ 当前锁定下找不到可行方案</div>
+          <div class="bad">✗ [{{ r.topology_version }}] 当前锁定下找不到可行方案</div>
           <p class="reason">{{ r.infeasible_reason }}</p>
 
           <h3>仍然连通的一条残余路径</h3>
           @if (r.residual_path; as rp) {
             <div class="path residual-p">
               <code>{{ rp.nodes.join(' → ') }}</code>
-              <div class="meta">
-                经过阀门：{{ formatValves(rp.valves) }}
-              </div>
+              <div class="meta">经过阀门：{{ formatValves(rp.valves) }}</div>
               <div class="meta" [class.bypass-line]="rp.uses_bypass">
                 {{ rp.uses_bypass ? '该残余路径经由旁路。' : '' }}
                 {{
@@ -145,9 +296,8 @@
             <p class="hint">
               关闭 {{ joinIds(ub.close_valves) }}（{{ ub.size }} 只）即可切断目标，
               但会断供：<b>{{ joinIds(ub.disconnects_essentials) }}</b
-              >。其中
-              <b>{{ joinIds(ub.unavoidable_essentials) }}</b>
-              在任何切法下都无法同时保住，因此不存在合格方案；其余必要供给点该切法仍可保住。
+              >。其中 <b>{{ joinIds(ub.unavoidable_essentials) }}</b>
+              在任何切法下都无法同时保住，因此不存在合格方案。
             </p>
           }
         }
@@ -156,7 +306,7 @@
   </div>
 
   <footer>
-    演示拓扑：来源 SRC — N1 — N2 — 设备T — N3；N2-BP-N3 旁路与 T 并联；
-    N1-N5-N3 环网联络；P1/P2 为不应断供支路。
+    v1 为固定演示样例（不可变）：SRC—N1—N2—设备T—N3；N2-BP-N3 旁路与 T 并联；
+    N1-N5-N3 环网；P1/P2 为必要供给点。复制 v1 发布的新版本拥有独立拓扑、锁阀与计算历史。
   </footer>
 </div>

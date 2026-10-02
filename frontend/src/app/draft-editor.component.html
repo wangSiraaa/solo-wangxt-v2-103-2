@@ -1,0 +1,173 @@
+<div class="editor">
+  <div class="editor-head">
+    <div>
+      <h2>拓扑草案编辑</h2>
+      <p class="hint">
+        草案 <b>{{ draft.id }}</b>，复制自基线
+        <b>{{ draft.base_version_id }}</b
+        >。可改节点、管段方向、阀门、旁路标记、来源/目标与必要供给点；
+        只有校验通过才能发布为新版本。
+      </p>
+    </div>
+    <div class="head-actions">
+      <input
+        class="pubname"
+        [(ngModel)]="publishName"
+        placeholder="新版本名称（可选）"
+      />
+      <button (click)="save()" [disabled]="busy">保存草案</button>
+      <button (click)="validate()" [disabled]="busy">校验</button>
+      <button class="primary" (click)="publish()" [disabled]="busy">
+        {{ busy ? '处理中…' : '校验并发布为新版本' }}
+      </button>
+      <button class="ghost" (click)="close()">关闭</button>
+    </div>
+  </div>
+
+  @if (serverError) {
+    <div class="server-error">⛔ {{ serverError }}</div>
+  }
+  @if (errors.length === 0 && (draft.validation_errors.length === 0 || serverError)) {
+    <!-- 已显式校验通过时给出正向反馈 -->
+  }
+  @if (errors.length) {
+    <div class="val-errors">
+      <b>校验未通过（{{ errors.length }} 项，发布已整体拒绝，不会留下半成品版本）：</b>
+      <ul>
+        @for (e of errors; track $index) {
+          <li>
+            <code>{{ e.code }}</code>
+            @if (e.ref) {
+              <span class="ref">[{{ e.ref }}]</span>
+            }
+            {{ e.message }}
+          </li>
+        }
+      </ul>
+    </div>
+  }
+
+  <div class="editor-grid">
+    <!-- 节点编辑 -->
+    <section class="edit-panel">
+      <div class="panel-head">
+        <h3>节点（{{ content.nodes.length }}）</h3>
+        <button (click)="addNode()">+ 节点</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>名称</th>
+            <th>种类（来源/目标…）</th>
+            <th>必要供给</th>
+            <th>x</th>
+            <th>y</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (n of content.nodes; track n.id) {
+            <tr [class.essential-row]="n.essential">
+              <td><input class="id-input" [(ngModel)]="n.id" /></td>
+              <td><input [(ngModel)]="n.name" /></td>
+              <td>
+                <select [(ngModel)]="n.kind">
+                  @for (k of nodeKinds; track k) {
+                    <option [value]="k">{{ k }}</option>
+                  }
+                </select>
+              </td>
+              <td class="center">
+                <input type="checkbox" [(ngModel)]="n.essential" title="必要供给点" />
+              </td>
+              <td><input class="num" type="number" [(ngModel)]="n.x" /></td>
+              <td><input class="num" type="number" [(ngModel)]="n.y" /></td>
+              <td>
+                <button class="danger" (click)="removeNode(n.id)">删</button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 管段编辑 -->
+    <section class="edit-panel">
+      <div class="panel-head">
+        <h3>管段（{{ content.segments.length }}）</h3>
+        <button (click)="addSegment()">+ 管段</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>起点</th>
+            <th>方向</th>
+            <th>终点</th>
+            <th>类型</th>
+            <th>旁路</th>
+            <th>阀门</th>
+            <th>阀名/开闭/可操作</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (s of content.segments; track s.id) {
+            <tr [class.bypass-row]="s.is_bypass">
+              <td><input class="id-input" [(ngModel)]="s.id" /></td>
+              <td>
+                <select [(ngModel)]="s.upstream_id">
+                  @for (id of nodeIds; track id) {
+                    <option [value]="id">{{ id }}</option>
+                  }
+                </select>
+              </td>
+              <td class="center">
+                <button class="dir" title="反转管段方向" (click)="reverse(s)">→</button>
+              </td>
+              <td>
+                <select [(ngModel)]="s.downstream_id">
+                  @for (id of nodeIds; track id) {
+                    <option [value]="id">{{ id }}</option>
+                  }
+                </select>
+              </td>
+              <td>
+                <select [(ngModel)]="s.kind">
+                  @for (k of segKinds; track k) {
+                    <option [value]="k">{{ k }}</option>
+                  }
+                </select>
+              </td>
+              <td class="center">
+                <input type="checkbox" [(ngModel)]="s.is_bypass" />
+              </td>
+              <td class="center">
+                <button (click)="toggleValve(s)">{{ s.valve ? '有阀' : '无阀' }}</button>
+              </td>
+              <td>
+                @if (s.valve; as v) {
+                  <div class="valve-edit">
+                    <input class="id-input" [(ngModel)]="v.id" placeholder="阀ID" />
+                    <input [(ngModel)]="v.name" placeholder="阀名" />
+                    <label><input type="checkbox" [(ngModel)]="v.is_open" /> 开</label>
+                    <label><input type="checkbox" [(ngModel)]="v.operable" /> 可操作</label>
+                  </div>
+                }
+              </td>
+              <td>
+                <button class="danger" (click)="removeSegment(s.id)">删</button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+      <p class="hint">
+        提示：种类 <code>source</code>=来源、<code>equipment</code>=目标设备；
+        勾选“必要供给”即必要供给点。同一条管段上的阀门 ID 在全图中必须唯一，
+        不能与其他管段共用。
+      </p>
+    </section>
+  </div>
+</div>

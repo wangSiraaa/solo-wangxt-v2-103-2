@@ -61,6 +61,10 @@ def seed_database(db: Session) -> None:
 
 
 def reset_database(db: Session) -> None:
-    """恢复演示初始状态：全部阀门打开、未锁定。"""
+    """恢复 v1 演示样例初始状态：全部阀门打开、未锁定。
+
+    只重置 v1 原表的锁阀态；版本链与其他版本不受影响
+    （v2+ 的锁阀状态由 versions.reset_locks 单独管理）。
+    """
     db.query(Valve).update({Valve.locked: False, Valve.is_open: True, Valve.operable: True})
     db.commit()

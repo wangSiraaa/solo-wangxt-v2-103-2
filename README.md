@@ -7,6 +7,26 @@
 - 后端：FastAPI + NetworkX（无向物理连通图上的候选阀门集合枚举与约束校验）
 - 存储：PostgreSQL（节点连接、阀门开闭/锁定、必要供给点；本地无 PG 时自动回退 SQLite）
 
+## 版本化拓扑草案
+
+固定样例以不可变版本 **v1** 永久保留；培训时可从任意已发布版本**复制出草案**，
+编辑节点、管段方向、阀门（与管段 1:1）、旁路标记、节点种类（来源/目标设备/
+必要供给点）与坐标，再**校验发布**为新版本（v2、v3……线性修订链）。
+
+- **不可变已发布版本**：发布即生成 JSON 快照，之后不再修改；v1 的三张原表也
+  仅保留原有锁定语义，结构永不改变。
+- **发布前强校验**（失败整体拒绝、不留半张图，草案保留以便修改）：
+  同一阀门绑定多条管段（`valve_bound_twice`）、孤立目标设备/必要供给点/来源
+  （`orphan_node`）、缺失来源（`missing_source`）、重复标识（`duplicate_id`）、
+  不完整边定义（`incomplete_edge`：缺端点/端点不存在/自环/平行边）及字段非法。
+- **修订冲突**：同一基线版本只能发布出一个后继；两个编辑者基于同一版本发布时，
+  后一份得到 **409 修订冲突**，不会覆盖先发布者，需基于最新版本重开草案。
+- **版本绑定**：每次计算、锁阀记录（`LockRecord`）、无解见证路径都归档为
+  `CalculationRecord`，带 `topology_version` 与当时的 `locks_snapshot`。
+  历史/刷新/导入旧记录时按其绑定版本取回拓扑绘制与解释，新版本不重解释旧结果。
+- **导入导出**：导出 bundle 保留版本链（`base_version_id`）与计算→版本关系；
+  导入为原子事务，内容一致的不可变版本（v1）可共享，任何差异或分叉整体拒绝。
+
 ## 演示拓扑
 
 ```
@@ -69,13 +89,22 @@ docker compose up --build
 
 ## API 摘要
 
-- `GET /api/topology`：节点 / 有向管段 / 阀门（含 `is_open`、`locked`、`is_bypass`）
-- `POST /api/isolation`：body `{ "target_id": "T", "locks": {"V_TIN": true} }`
+- `GET /api/topology`：节点 / 有向管段 / 阀门（含 `is_open`、`locked`、`is_bypass`、
+  `topology_version`）；可带 `?topology_version=v2` 取指定版本
+- `POST /api/isolation`：body
+  `{ "target_id": "T", "locks": {"V_TIN": true}, "topology_version": "v2" }`
   - 可行：`best_solution`（最少阀门）、等价方案、方案后每个必要供给点的来源路径
   - 不可行：`residual_path`（仍连通的一条残余路径）、`locked_witness_path`（经锁定阀的见证路径）、
     `unconstrained_best.unavoidable_essentials`（任何切法都无法保住的供给点）
-- `POST /api/valves/{valve_id}/lock`：持久化单只阀门锁定状态
-- `POST /api/reset`：全部阀门恢复打开、未锁定
+  - 返回与归档均带 `topology_version`、`calculation_id`
+- `POST /api/valves/{id}/lock`：持久化单只阀门锁定（可带 `topology_version`，按版本隔离）
+- `POST /api/reset`：恢复指定版本阀门打开、未锁定（v1 为原样例语义）
+- `GET /api/versions` / `POST /api/current-version`：版本列表与当前版本切换
+- `POST /api/drafts`、`GET|PUT|DELETE /api/drafts/{id}`、
+  `POST /api/drafts/{id}/validate`、`POST /api/drafts/{id}/publish`
+  （校验失败返回 `published:false` + 错误列表；修订冲突返回 409）
+- `GET /api/calculations` / `GET /api/calculations/{id}`：计算历史与旧记录（按绑定版本解释）
+- `GET /api/versions/{id}/export` / `POST /api/import`：版本+计算关系的导入导出
 
 ## 安全边界声明
 
