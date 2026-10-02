@@ -19,14 +19,44 @@ import { IsolationResult, Topology } from './models';
 @Component({
   selector: 'app-network-graph',
   standalone: true,
-  template: `<div #cy class="cy"></div>`,
+  template: `
+    <div class="cy-wrap">
+      <div #cy class="cy"></div>
+      @if (topology?.topo_version; as tv) {
+        <div class="cy-version" title="当前绘图所依据的不可变拓扑版本">
+          拓扑 v{{ tv.version_no }} · {{ tv.name }}
+        </div>
+      }
+    </div>
+  `,
   styles: [
     `
+      .cy-wrap {
+        position: relative;
+      }
       .cy {
         width: 100%;
         height: 560px;
         background: #0f172a;
         border-radius: 10px;
+      }
+      .cy-version {
+        position: absolute;
+        top: 10px;
+        left: 12px;
+        z-index: 5;
+        background: rgba(15, 23, 42, 0.78);
+        color: #c7d2fe;
+        border: 1px solid #6366f1;
+        border-radius: 6px;
+        padding: 3px 10px;
+        font-size: 12px;
+        font-family: monospace;
+        pointer-events: none;
+        max-width: 70%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
     `,
   ],

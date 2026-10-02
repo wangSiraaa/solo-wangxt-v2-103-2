@@ -7,6 +7,14 @@ export interface TopoNode {
   essential: boolean;
 }
 
+export interface SegmentValve {
+  id: string;
+  name: string;
+  is_open: boolean;
+  locked: boolean;
+  operable: boolean;
+}
+
 export interface Segment {
   id: string;
   source: string;
@@ -15,6 +23,21 @@ export interface Segment {
   kind: 'main' | 'bypass' | 'branch';
   is_bypass: boolean;
   valve_id: string | null;
+}
+
+/** 草案可编辑内容中的管段：端点/方向/旁路标记/阀门都可改。 */
+export interface DraftSegment {
+  id: string;
+  source: string;
+  target: string;
+  kind: 'main' | 'bypass' | 'branch';
+  is_bypass: boolean;
+  valve: SegmentValve | null;
+}
+
+export interface DraftContent {
+  nodes: TopoNode[];
+  segments: DraftSegment[];
 }
 
 export interface Valve {
@@ -28,10 +51,50 @@ export interface Valve {
   is_bypass: boolean;
 }
 
+export interface TopoVersionMeta {
+  version_no: number;
+  name: string;
+  base_version_no: number | null;
+  created_by: string;
+  note: string;
+  immutable: boolean;
+  created_at: string;
+  content_hash: string;
+}
+
 export interface Topology {
   nodes: TopoNode[];
   segments: Segment[];
   valves: Valve[];
+  topo_version?: TopoVersionMeta | null;
+}
+
+export interface DraftSummary {
+  id: string;
+  name: string;
+  base_version_no: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  published_version_no: number | null;
+}
+
+export interface DraftDetail extends DraftSummary {
+  content: DraftContent;
+  validation: { valid: boolean; errors: string[] };
+}
+
+export interface HistoryRecord {
+  id: number;
+  version_no: number;
+  version_name: string;
+  target_id: string;
+  locks: Record<string, boolean>;
+  result: IsolationResult;
+  created_at: string;
+  created_by: string;
+  topology?: Topology;
+  topo_version?: TopoVersionMeta;
 }
 
 export interface Solution {
@@ -52,6 +115,9 @@ export interface ResidualPath {
 export interface IsolationResult {
   feasible: boolean;
   target_id: string;
+  topo_version?: TopoVersionMeta | null;
+  record_id?: number | null;
+  locked_valves?: string[];
   sources: string[];
   essentials: string[];
   candidate_valves: Valve[];

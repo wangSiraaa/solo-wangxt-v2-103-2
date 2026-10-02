@@ -1,6 +1,6 @@
 """隔离候选集合计算（NetworkX）。
 
-模型约定（仅适用于本演示的固定拓扑与阀门模型）：
+模型约定（仅适用于本演示拓扑与阀门模型）：
 
 1. 图为无向“物理连通图”——隔离边界阀门无论装在设备哪一侧，关闭后该物理
    连通即被切断。管段上保存的 up/down 方向用于前端箭头与来源/下游解释。
@@ -13,10 +13,15 @@
    并可返回若干等价方案。
 5. 不存在有效集合时，返回当前仍可从来源到达目标设备的一条残余路径
    以及断供/无法隔离的诊断信息。
+
+版本化：核心算法只依赖“视图”（节点字典 + 管段字典），视图既可来自旧的
+固定表（v1 兼容路径），也可来自已发布拓扑版本的不可变快照。计算结果
+绑定调用方传入的版本，算法本身不会跨版本读取任何状态。
 """
 from __future__ import annotations
 
 from itertools import combinations
+from types import SimpleNamespace
 from typing import Any
 
 import networkx as nx
@@ -53,6 +58,46 @@ def _load(db: Session) -> tuple[list[Node], dict[str, dict[str, Any]]]:
             "is_open": v.is_open if v else True,
             "locked": v.locked if v else False,
             "operable": v.operable if v else True,
+        }
+    return nodes, edges
+
+
+def snapshot_to_view(
+    snapshot: dict[str, Any], locks: dict[str, bool] | None = None
+) -> tuple[list[SimpleNamespace], dict[str, dict[str, Any]]]:
+    """把版本快照转换为算法视图。
+
+    locks 为本次计算/该版本保存的阀门锁定覆盖值；快照自身的 locked 字段
+    只作为结构默认（发布时恒为 false），运行期锁定以版本锁定记录为准。
+    """
+    locks = locks or {}
+    nodes = [
+        SimpleNamespace(
+            id=n["id"],
+            name=n.get("name", n["id"]),
+            kind=n["kind"],
+            x=float(n.get("x", 0.0)),
+            y=float(n.get("y", 0.0)),
+            essential=bool(n.get("essential", False)),
+        )
+        for n in snapshot["nodes"]
+    ]
+    edges: dict[str, dict[str, Any]] = {}
+    for seg in snapshot["segments"]:
+        v = seg.get("valve")
+        vid = v["id"] if v else None
+        edges[seg["id"]] = {
+            "id": seg["id"],
+            "u": seg["upstream_id"],
+            "v": seg["downstream_id"],
+            "direction": f"{seg['upstream_id']}->{seg['downstream_id']}",
+            "kind": seg.get("kind", "main"),
+            "is_bypass": bool(seg.get("is_bypass", False)),
+            "valve_id": vid,
+            "valve_name": v.get("name", vid) if v else None,
+            "is_open": bool(v.get("is_open", True)) if v else True,
+            "locked": bool(locks.get(vid, v.get("locked", False))) if v else False,
+            "operable": bool(v.get("operable", True)) if v else True,
         }
     return nodes, edges
 
@@ -158,8 +203,10 @@ def _valve_view(edges: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(out, key=lambda x: x["id"])
 
 
-def compute_isolation(db: Session, target_id: str) -> dict[str, Any]:
-    nodes, edges = _load(db)
+def compute_from_view(
+    nodes: list[Any], edges: dict[str, dict[str, Any]], target_id: str
+) -> dict[str, Any]:
+    """隔离算法核心：与存储无关，只接受节点/管段视图。"""
     node_ids = {n.id for n in nodes}
     if target_id not in node_ids:
         raise TopologyError(f"目标节点不存在: {target_id}")
@@ -398,8 +445,32 @@ def compute_isolation(db: Session, target_id: str) -> dict[str, Any]:
     return result
 
 
+def compute_isolation(db: Session, target_id: str) -> dict[str, Any]:
+    """v1 兼容入口：从旧的固定表加载视图并计算。"""
+    nodes, edges = _load(db)
+    return compute_from_view(nodes, edges, target_id)
+
+
+def compute_snapshot(
+    snapshot: dict[str, Any], target_id: str, locks: dict[str, bool] | None = None
+) -> dict[str, Any]:
+    """版本化入口：基于不可变快照 + 该版本的锁定记录计算。"""
+    nodes, edges = snapshot_to_view(snapshot, locks)
+    return compute_from_view(nodes, edges, target_id)
+
+
 def topology_payload(db: Session) -> dict[str, Any]:
     nodes, edges = _load(db)
+    return _payload_from_view(nodes, edges)
+
+
+def topology_payload_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """从快照生成拓扑响应（运行期锁定不带入，结构视图）。"""
+    nodes, edges = snapshot_to_view(snapshot)
+    return _payload_from_view(nodes, edges)
+
+
+def _payload_from_view(nodes: list[Any], edges: dict[str, dict[str, Any]]) -> dict[str, Any]:
     return {
         "nodes": [
             {"id": n.id, "name": n.name, "kind": n.kind, "x": n.x, "y": n.y, "essential": n.essential}

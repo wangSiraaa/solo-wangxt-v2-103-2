@@ -1,0 +1,167 @@
+<div class="editor">
+  <div class="editor-head">
+    <h2>
+      拓扑草案编辑
+      <span class="base-tag">基线 v{{ draft.base_version_no }}</span>
+      @if (draft.published_version_no) {
+        <span class="pub-tag">已发布 v{{ draft.published_version_no }}</span>
+      }
+    </h2>
+    <button class="ghost small" (click)="close()">收起 ✕</button>
+  </div>
+
+  <div class="editor-grid">
+    <label class="draft-name">
+      草案名称
+      <input [(ngModel)]="draft.name" [disabled]="!!draft.published_version_no" />
+    </label>
+  </div>
+
+  @if (error) {
+    <div class="error">{{ error }}</div>
+  }
+  @if (info) {
+    <div class="info">{{ info }}</div>
+  }
+
+  <!-- 节点表 -->
+  <section>
+    <div class="sec-head">
+      <h3>节点（来源 / 目标 / 必要供给点）</h3>
+      <button class="small" (click)="addNode()" [disabled]="!!draft.published_version_no">＋ 节点</button>
+    </div>
+    <table class="edit-table">
+      <thead>
+        <tr>
+          <th>ID</th><th>名称</th><th>类型</th><th>x</th><th>y</th><th>必要供给点</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (n of nodes; track n.id) {
+          <tr [class.essential-row]="n.essential">
+            <td><input class="id-input" [(ngModel)]="n.id" /></td>
+            <td><input [(ngModel)]="n.name" /></td>
+            <td>
+              <select [(ngModel)]="n.kind">
+                @for (k of nodeKinds; track k) {
+                  <option [value]="k">{{ kindLabels[k] }}（{{ k }}）</option>
+                }
+              </select>
+            </td>
+            <td><input class="num" type="number" [(ngModel)]="n.x" /></td>
+            <td><input class="num" type="number" [(ngModel)]="n.y" /></td>
+            <td class="center">
+              <input type="checkbox" [(ngModel)]="n.essential" />
+            </td>
+            <td>
+              <button class="ghost small" (click)="removeNode(n.id)"
+                [disabled]="!!draft.published_version_no">删除</button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 管段表 -->
+  <section>
+    <div class="sec-head">
+      <h3>管段（方向 / 旁路标记 / 阀门）</h3>
+      <button class="small" (click)="addSegment()" [disabled]="!!draft.published_version_no">＋ 管段</button>
+    </div>
+    <table class="edit-table">
+      <thead>
+        <tr>
+          <th>管段ID</th><th>来源(source)</th><th></th><th>目标(target)</th>
+          <th>类型</th><th>旁路</th><th>阀门ID / 名称</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (s of segments; track s.id) {
+          <tr [class.bypass-row]="s.is_bypass">
+            <td><input class="id-input" [(ngModel)]="s.id" /></td>
+            <td>
+              <select [(ngModel)]="s.source">
+                @for (n of nodes; track n.id) {
+                  <option [value]="n.id">{{ n.id }}</option>
+                }
+              </select>
+            </td>
+            <td class="center">
+              <button class="ghost small" title="反转管段方向"
+                (click)="reverseDirection(s)" [disabled]="!!draft.published_version_no">⇄</button>
+            </td>
+            <td>
+              <select [(ngModel)]="s.target">
+                @for (n of nodes; track n.id) {
+                  <option [value]="n.id">{{ n.id }}</option>
+                }
+              </select>
+            </td>
+            <td>
+              <select [(ngModel)]="s.kind">
+                @for (k of segKinds; track k) {
+                  <option [value]="k">{{ k }}</option>
+                }
+              </select>
+            </td>
+            <td class="center"><input type="checkbox" [(ngModel)]="s.is_bypass" /></td>
+            <td>
+              @if (s.valve; as v) {
+                <div class="valve-edit">
+                  <input class="id-input" [(ngModel)]="v.id" placeholder="阀门ID" />
+                  <input [(ngModel)]="v.name" placeholder="阀门名称" />
+                </div>
+              } @else {
+                <button class="ghost small" (click)="toggleValve(s)"
+                  [disabled]="!!draft.published_version_no">＋ 绑定阀门</button>
+              }
+            </td>
+            <td>
+              <div class="row-actions">
+                @if (s.valve) {
+                  <button class="ghost small" title="移除阀门绑定"
+                    (click)="toggleValve(s)" [disabled]="!!draft.published_version_no">解绑阀</button>
+                }
+                <button class="ghost small" (click)="removeSegment(s)"
+                  [disabled]="!!draft.published_version_no">删除</button>
+              </div>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+    <p class="hint">
+      ⇄ 一键反转名义方向（仅影响箭头与来源/目标解释；隔离仍按无向物理连通计算）。
+      旁路管段会在图上以紫虚线呈现。
+    </p>
+  </section>
+
+  <!-- 校验结果 -->
+  <section class="validation">
+    <h3>发布前校验（整体校验，任一失败则整体拒绝）</h3>
+    @if (draft.validation.valid) {
+      <div class="ok">✓ 当前草案通过全部校验，可以发布。</div>
+    } @else {
+      <div class="bad">✗ {{ draft.validation.errors.length }} 项问题：</div>
+      <ul class="error-list">
+        @for (e of draft.validation.errors; track $index) {
+          <li>{{ e }}</li>
+        }
+      </ul>
+    }
+  </section>
+
+  <div class="editor-actions">
+    <button (click)="save()" [disabled]="saving || !!draft.published_version_no">
+      {{ saving ? '保存中…' : '保存草稿' }}
+    </button>
+    <button class="primary" (click)="publish()"
+      [disabled]="publishing || !!draft.published_version_no">
+      {{ publishing ? '发布中…' : '校验并发布为新版本' }}
+    </button>
+    @if (draft.published_version_no) {
+      <span class="hint">该草案已发布，不可再编辑；可从新版本再复制新草案。</span>
+    }
+  </div>
+</div>

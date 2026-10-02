@@ -274,4 +274,297 @@ footer {
   color: #991b1b;
   padding: 8px 12px;
   border-radius: 8px;
+  white-space: pre-wrap;
+}
+
+.info {
+  margin-top: 12px;
+  background: #dcfce7;
+  color: #166534;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+/* -------- 版本栏 -------- */
+.version-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.vb-left,
+.vb-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vb-left select {
+  font-size: 13px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border: 1px solid #cbd5e1;
+  max-width: 380px;
+}
+
+.v-chip {
+  font-size: 12px;
+  background: #e0e7ff;
+  color: #3730a3;
+  border: 1px solid #a5b4fc;
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.v-chip.immutable {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
+.v-chip em {
+  font-style: normal;
+  opacity: 0.85;
+}
+
+.ver-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: monospace;
+  color: #3730a3;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 6px;
+  padding: 1px 6px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+.graph-sub {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0 0 8px;
+}
+
+/* -------- 草案编辑器 -------- */
+.editor-layout {
+  grid-template-columns: 1fr;
+}
+
+.editor {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px 20px;
+}
+
+.editor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.editor-head h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.base-tag,
+.pub-tag {
+  font-size: 11px;
+  font-family: monospace;
+  border-radius: 6px;
+  padding: 2px 8px;
+  margin-left: 8px;
+}
+
+.base-tag {
+  background: #e0f2fe;
+  color: #075985;
+  border: 1px solid #7dd3fc;
+}
+
+.pub-tag {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+.editor-grid {
+  margin: 10px 0;
+}
+
+.draft-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.draft-name input {
+  flex: 1;
+  max-width: 360px;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+}
+
+.sec-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.sec-head h3 {
+  margin: 0;
+}
+
+.edit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-top: 6px;
+  display: block;
+  overflow-x: auto;
+}
+
+.edit-table th,
+.edit-table td {
+  border: 1px solid #e2e8f0;
+  padding: 4px 6px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.edit-table th {
+  background: #f8fafc;
+  color: #475569;
+}
+
+.edit-table input,
+.edit-table select {
+  padding: 4px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 12px;
+  max-width: 150px;
+}
+
+.edit-table .id-input {
+  font-family: monospace;
+  max-width: 110px;
+}
+
+.edit-table .num {
+  max-width: 70px;
+}
+
+.edit-table .center {
+  text-align: center;
+}
+
+.essential-row {
+  background: #eff6ff;
+}
+
+.bypass-row {
+  background: #faf5ff;
+}
+
+.valve-edit {
+  display: flex;
+  gap: 4px;
+}
+
+.row-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.validation {
+  margin-top: 14px;
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 10px;
+}
+
+.error-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: #991b1b;
+}
+
+.error-list li {
+  margin: 2px 0;
+}
+
+.editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+button.small {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+/* -------- 历史 / 草案列表 -------- */
+.history-list,
+.draft-mini {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0;
+}
+
+.history-list li,
+.draft-mini li {
+  margin: 6px 0;
+  font-size: 12px;
+}
+
+.hist-btn {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.hist-btn em {
+  margin-left: auto;
+  font-style: normal;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.link-btn {
+  border: none;
+  background: none;
+  color: #1d4ed8;
+  text-decoration: underline;
+  padding: 2px 4px;
+}
+
+.import-btn {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  border-radius: 7px;
+  padding: 8px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.import-btn:hover {
+  background: #e2e8f0;
 }
